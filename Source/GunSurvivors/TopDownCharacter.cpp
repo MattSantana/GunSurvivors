@@ -1,4 +1,5 @@
 #include "TopDownCharacter.h"
+#include "Kismet/KismetMathLibrary.h"
 
 
 ATopDownCharacter::ATopDownCharacter()
@@ -10,6 +11,15 @@ ATopDownCharacter::ATopDownCharacter()
 
 	CharacterFlipbook = CreateDefaultSubobject<UPaperFlipbookComponent>(TEXT("CharacterFlipbook"));
 	CharacterFlipbook->SetupAttachment(RootComponent);
+
+	GunParent = CreateDefaultSubobject<USceneComponent>(TEXT("GunParent"));
+	GunParent->SetupAttachment(RootComponent);
+
+	GunSprite = CreateDefaultSubobject<UPaperSpriteComponent>(TEXT("GunSprite"));
+	GunSprite->SetupAttachment(GunParent);
+
+	BulletSpawnPosition = CreateDefaultSubobject<USceneComponent>(TEXT("BulletSpawnPosition"));
+	BulletSpawnPosition->SetupAttachment(GunSprite);
 
 }
 
@@ -24,6 +34,8 @@ void ATopDownCharacter::BeginPlay()
 	//checking if the cast was successful or not
 	if (PlayerController)
 	{
+		PlayerController->SetShowMouseCursor(true);
+
 		//I need the Subsystem to use the AddMappingContext method, and add it tho the player. That's what i'm doing here
 
 		//get the subsystem from the PlayerController
@@ -38,10 +50,29 @@ void ATopDownCharacter::BeginPlay()
 	}
 }
 
+bool ATopDownCharacter::IsInMapBoundsHorizontal(float XPos)
+{
+	bool Result = true;
+
+	Result = (XPos > HorizontalLimits.X) && (XPos < HorizontalLimits.Y);
+
+	return Result;
+}
+
+bool ATopDownCharacter::IsInMapBoundsVertical(float ZPos)
+{
+	bool Result = true;
+
+	Result = (ZPos > VerticalLimits.X) && (ZPos < VerticalLimits.Y);
+
+	return Result;
+}
+
 void ATopDownCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	//move the player
 	if (CanMove)
 	{
 		//checking if the buttons are being pressed
@@ -60,12 +91,43 @@ void ATopDownCharacter::Tick(float DeltaTime)
 			FVector CurrentLocation = GetActorLocation();
 
 			//calculate new Location
-			FVector NewLocation = CurrentLocation + FVector(DistanceToMove.X, 0.0f, DistanceToMove.Y);
-		
+			FVector NewLocation = CurrentLocation + FVector(DistanceToMove.X, 0.0f, 0.0f);
+			
+			if (!IsInMapBoundsHorizontal(NewLocation.X))
+			{
+				NewLocation-= FVector(DistanceToMove.X, 0.0f, 0.0f);
+			}
+			
+			NewLocation += FVector(0.0f, 0.0f, DistanceToMove.Y);
+
+			if (!IsInMapBoundsVertical(NewLocation.Z))
+			{
+				NewLocation -= FVector(0.0f, 0.0f, DistanceToMove.Y);
+			}
+
 			//move the player to the new location
 			SetActorLocation(NewLocation);
 		}
 	}
+
+	//Rotate the gun
+	
+	//We need the player controller to find the mouse position at the world
+	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+	if (PlayerController)
+	{
+		FVector MouseWorldLocation, MouseWorldDirection;
+		PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection);
+		
+		FVector CurrentLocation = GetActorLocation();
+		FVector Start = FVector(CurrentLocation.X, 0.0f, CurrentLocation.Z);
+		FVector Target = FVector(MouseWorldLocation.X, 0.0f, MouseWorldLocation.Z);
+		
+		FRotator GunParentRotator = UKismetMathLibrary::FindLookAtRotation(Start, Target);
+		
+		GunParent->SetRelativeRotation(GunParentRotator);
+	}
+
 }
 
 void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -99,6 +161,29 @@ void  ATopDownCharacter::MoveTriggred(const FInputActionValue& Value)
 	if (CanMove)
 	{
 		MovementDirection = MoveActionValue;
+
+		CharacterFlipbook->SetFlipbook(RunFlipBook);
+
+		FVector FlipbookScale = CharacterFlipbook->GetComponentScale();
+
+
+		//checking which direction we're going
+		//inside of it, checking if the flipbook comp already has the scale we want. 
+		//if not, we change it once.
+		if (MovementDirection.X < 0.0f)
+		{
+			if (FlipbookScale.X > 0.0f)
+			{
+				CharacterFlipbook->SetWorldScale3D(FVector(-1.0f, 1.0f, 1.0f));
+			}
+		}
+		else if (MovementDirection.X > 0.0f)
+		{
+			if (FlipbookScale.X < 0.0f)
+			{
+				CharacterFlipbook->SetWorldScale3D(FVector(1.0f, 1.0f, 1.0f));
+			}
+		}
 	}
 }
 
@@ -106,6 +191,8 @@ void  ATopDownCharacter::MoveTriggred(const FInputActionValue& Value)
 void  ATopDownCharacter::MoveCompleted(const FInputActionValue& Value)
 {
 	MovementDirection = FVector2D::ZeroVector;
+
+	CharacterFlipbook->SetFlipbook(IdleFlipBook);
 }
 
 void  ATopDownCharacter::Shoot(const FInputActionValue& Value)
