@@ -2,6 +2,7 @@
 #include "Kismet/KismetMathLibrary.h"
 
 
+
 ATopDownCharacter::ATopDownCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -197,6 +198,43 @@ void  ATopDownCharacter::MoveCompleted(const FInputActionValue& Value)
 
 void  ATopDownCharacter::Shoot(const FInputActionValue& Value)
 {
+	//We're basically saying that we have to wait the timer finish, so can shoot become true
+	//and we're able to shoot again.
+	if(CanShoot) 
+	{ 
+		CanShoot = false; 
 
+		//bulletSpawn actor code
+		ABullet* Bullet = GetWorld()->SpawnActor<ABullet>( BulletActorToSpawn, BulletSpawnPosition->GetComponentLocation(), FRotator::ZeroRotator);
+
+		check(Bullet);
+
+		//get mouse world location
+		APlayerController* PlayerController = Cast<APlayerController>(Controller);
+
+		check(PlayerController);
+
+		FVector MouseWorldLocation, MouseWorldDirection;
+		PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection);
+
+		//calculate bullet direction
+		FVector CurrentLocation = GetActorLocation();
+		FVector2D BulletDirection = FVector2D(MouseWorldLocation.X - CurrentLocation.X, MouseWorldLocation.Z - CurrentLocation.Z);
+
+		BulletDirection.Normalize();
+
+		//Launch the bullet
+		Bullet->Launch(BulletDirection, BulletSpeed);
+
+		GetWorldTimerManager().SetTimer(ShootCooldownTimer, this, &ATopDownCharacter::OnShootCoooldownTimerTimeout, 1.0f, false, ShootCooldownDurationInSeconds);
+
+	}
+	
+	
+}
+
+void ATopDownCharacter::OnShootCoooldownTimerTimeout()
+{
+	CanShoot = true;
 }
 
