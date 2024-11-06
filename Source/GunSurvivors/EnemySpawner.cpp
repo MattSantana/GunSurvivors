@@ -37,6 +37,11 @@ void AEnemySpawner::OnSpawnTimerTimeout()
 
 void AEnemySpawner::SpawnEnemy()
 {
-	FVector EnemyLocation = GetActorLocation();
+	FVector2D RandomPostion = FVector2D(FMath::VRand());
+	RandomPostion.Normalize();
+	RandomPostion *= SpawnDistance;
+
+
+	FVector EnemyLocation = GetActorLocation() + FVector(RandomPostion.X, 0, RandomPostion.Y);
 	AEnemy* Enemy = GetWorld()->SpawnActor <AEnemy> (EnemyActorToSpawn, EnemyLocation, FRotator::ZeroRotator);
 }
